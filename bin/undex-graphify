@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+UNDEX_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+# shellcheck source=lib/common.sh
+source "$UNDEX_ROOT/lib/common.sh"
+refresh=0
+target=''
+for arg in "$@"; do
+    case "$arg" in
+        --refresh) refresh=1 ;;
+        --help|-h) printf 'Usage: undex-graphify [PATH] [--refresh]\nBuild/reuse a code-only graph and configure MCP in the repository.\n'; exit 0 ;;
+        -*) printf 'Unknown option: %s\n' "$arg" >&2; exit 1 ;;
+        *) [[ -z "$target" ]] || { printf 'Only one repository path is accepted.\n' >&2; exit 1; }; target="$arg" ;;
+    esac
+done
+repo="$(git -C "${target:-$PWD}" rev-parse --show-toplevel)" || { printf 'Run inside a Git repository or pass its path.\n' >&2; exit 1; }
+repo="$(cd -- "$repo" && pwd -P)"
+for tool in uv graphify graphify-mcp; do
+    command -v "$tool" >/dev/null || { printf '%s is missing. Run bash %q/install.sh first.\n' "$tool" "$UNDEX_ROOT" >&2; exit 1; }
+done
+command_path="$(command -v graphify-mcp)"
+graph="$repo/graphify-out/graph.json"
+undex_lock graphify
+if [[ ! -f "$graph" || "$refresh" == 1 ]]; then
+    cfg backup-file --graph "$graph" --backup-root "$UNDEX_BACKUP_ROOT"
+    printf 'Indexing code in %s (AST only; no model calls).\n' "$repo"
+    (
+        cd -- "$repo"
+        unset GRAPHIFY_FORCE
+        export GRAPHIFY_NO_TIPS=1
+        graphify update "$repo" --no-cluster
+        graphify cluster-only "$repo" --no-label --no-viz
+    )
+fi
+cfg check-graph --graph "$graph"
+cfg graphify --repo "$repo" --command "$command_path" --graph "$graph" --backup-root "$UNDEX_BACKUP_ROOT"
+printf 'Graphify MCP configured in %s/.codex/config.toml\nGraph: %s\nUse a trusted project and start a fresh Codex session to load it.\n' "$repo" "$graph"

@@ -1,0 +1,9 @@
+[project]
+name = "undex-setup"
+version = "0.1.0"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = ["tomlkit>=0.13.3,<1"]
+
+[tool.uv]
+package = false

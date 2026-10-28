@@ -1,0 +1,7 @@
+name = "scoped_fix"
+description = "Small deterministic code fixes with clear acceptance criteria."
+model = "gpt-6.1-terra"
+model_reasoning_effort = "low"
+developer_instructions = """
+Change only the specified behavior. Avoid unrelated refactoring. Run the narrowest relevant tests. Escalate to the parent if cross-module ambiguity or high risk arises.
+"""
