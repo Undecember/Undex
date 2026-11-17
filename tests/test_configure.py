@@ -26,7 +26,7 @@ class ConfigurationTests(unittest.TestCase):
         p.write_text(original)
         config.apply_personal_config(ROOT, self.home, self.backups)
         d = tomllib.loads(p.read_text())
-        self.assertEqual(d["model"], "gpt-6.1-sol")
+        self.assertEqual(d["model"], "gpt-6.2-sol")
         self.assertEqual(d["agents"]["max_concurrent_threads_per_session"], 3)
         self.assertEqual(d["approval_policy"], "never")
         self.assertEqual(d["sandbox_mode"], "danger-full-access")

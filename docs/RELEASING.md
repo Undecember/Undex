@@ -3,6 +3,10 @@
 Initial release: `v0.1.0`, squash-integrated from `dev` into `main`. The project is a source
 bundle (`tool.uv.package = false`), not a Python package for publication to PyPI.
 
+Current release: `v0.1.1`, a preview for the GPT-6.2 routing updates.
+Its notes are in `docs/releases/v0.1.1.md`. Full fresh-host validation is still
+outstanding, so keep the preview designation when publishing before that validation.
+
 Release preparation creates notes and local assets. Tagging, pushing, and creating
 or publishing a GitHub release are separate explicit steps.
 
@@ -33,12 +37,12 @@ git status --short
 After the release preparation is committed and the tag is explicitly approved:
 
 ```bash
-git tag -a v0.1.0 -m "Undex v0.1.0"
+git tag -a v0.1.1 -m "Undex v0.1.1"
 mkdir -p dist
-git archive --format=tar.gz --prefix=undex-0.1.0/ v0.1.0 > dist/undex-0.1.0.tar.gz
-(cd dist && sha256sum undex-0.1.0.tar.gz > SHA256SUMS)
+git archive --format=tar.gz --prefix=undex-0.1.1/ v0.1.1 > dist/undex-0.1.1.tar.gz
+(cd dist && sha256sum undex-0.1.1.tar.gz > SHA256SUMS)
 (cd dist && sha256sum -c SHA256SUMS)
-tar -tzf dist/undex-0.1.0.tar.gz
+tar -tzf dist/undex-0.1.1.tar.gz
 ```
 
 The archive contains only the tagged source tree. It excludes `.git`, local
@@ -57,11 +61,11 @@ Push the reviewed branch and tag:
 
 ```bash
 git push origin main
-git push origin v0.1.0
+git push origin v0.1.1
 ```
 
 On GitHub, open **Releases → Draft a new release**, select the existing tag, use
-`Undex v0.1.0` as the title, paste the notes from `docs/releases/v0.1.0.md`, and
+`Undex v0.1.1` as the title, paste the notes from `docs/releases/v0.1.1.md`, and
 attach both assets. Save the draft before publishing. GitHub CLI is not required.
 
 Remove the draft-status sentence from the notes and set the changelog release date

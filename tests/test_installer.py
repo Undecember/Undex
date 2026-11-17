@@ -17,7 +17,7 @@ class InstallerTests(ShellTest):
         self.assert_ok(self.install('--non-interactive'))
         data=tomllib.loads((home/'config.toml').read_text())
         self.assertIn('other',data['mcp_servers'])
-        self.assertEqual(data['model'],'gpt-6.1-sol')
+        self.assertEqual(data['model'],'gpt-6.2-sol')
         self.assertTrue((self.home/'.local/bin/undex-graphify').is_file())
         before=len(self.calls())
         self.assert_ok(self.install('--non-interactive'))

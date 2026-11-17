@@ -62,8 +62,8 @@ Official references: [nvm](https://github.com/nvm-sh/nvm#installing-and-updating
 
 ## Personal defaults
 
-- Main model: `gpt-6.1-sol`, medium reasoning.
-- Agents enabled, concurrency setting `3`, Sol/medium fallback.
+- Main model: `gpt-6.2-sol`, medium reasoning.
+- Agents enabled, concurrency setting `3`, `gpt-6.2-sol`/medium fallback.
 - Approval policy `never` and sandbox `danger-full-access`: Codex commands run
   without approval prompts or Codex filesystem sandbox restrictions.
 - Routing and cost policy, Superpowers workflow, Context7 documentation lookup,
@@ -72,8 +72,18 @@ Official references: [nvm](https://github.com/nvm-sh/nvm#installing-and-updating
   `docs_researcher`, `reviewer`, `scoped_fix`, `security_reviewer`, `test_engineer`,
   `triage`, and `ui_engineer`.
 
-Role definitions retain their original model assignments and instructions. The
-`ui_engineer` role references Impeccable; Undex does not install it. Models still
+Debugger, reviewer, and UI engineer use `gpt-6.2-sol` with their existing reasoning
+levels. Security reviewer uses `gpt-6.2-astra` at high reasoning. Luna remains
+assigned to exploration, documentation lookup, and triage; Terra remains assigned
+to browser QA, scoped fixes, and focused test work. Each role explicitly pins its
+model and reasoning level, so changing the fallback alone does not update roles.
+
+Unresolved cross-module failures and competing architectural constraints escalate
+to Astra at high reasoning; complex integration-test work escalates from Terra to
+Sol. Compare total usage, retries, review corrections, elapsed time, and verification
+success per accepted result before changing reasoning levels or concurrency.
+
+The `ui_engineer` role references Impeccable; Undex does not install it. Models still
 require access on the signed-in account; Undex does not silently substitute models.
 
 Personal instructions are placed in a marked block in `AGENTS.md`; existing text
@@ -282,8 +292,9 @@ chosen scope and defaults.
 
 ## Release and license
 
-Version `0.1.0` is the initial release. See the
-[changelog](CHANGELOG.md), [release notes](docs/releases/v0.1.0.md), and
+Version `0.1.1` is a preview release, updating model routing after the
+initial `0.1.0` release. See the
+[changelog](CHANGELOG.md), [release notes](docs/releases/v0.1.1.md), and
 [release procedure](docs/RELEASING.md).
 
 Undex is licensed under the [MIT License](LICENSE). Installed upstream tools and

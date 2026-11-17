@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.1 — 2026-11-18 (preview)
+
+- Upgrade the main agent and subagent fallback to GPT-6.2 Sol at medium reasoning.
+- Upgrade debugger, reviewer, and UI engineer to GPT-6.2 Sol, preserving reasoning levels.
+- Use GPT-6.2 Astra at high reasoning for consequential security reviews.
+- Retain Luna and Terra assignments for focused work and keep concurrency at three.
+- Define escalation to Astra for unresolved cross-module failures and competing
+  architectural constraints, and to Sol for complex integration-test work.
+- Document evaluation by total usage, retries, review corrections, elapsed time,
+  and verification success per accepted result.
+
+Full fresh-host provisioning and personal account authorization remain unverified;
+this release is a preview until those checks are complete. See the release notes.
+
 ## 0.1.0 — 2026-10-29
 
 Initial personal Codex setup bundle for Ubuntu/Linux.
