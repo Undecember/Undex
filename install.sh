@@ -67,4 +67,4 @@ run_component 'Playwright skills/browser' configure_playwright || true
 run_component 'Codex authentication' ensure_codex_login || true
 select_optional_plugins
 run_component Plugins install_plugins || true
-run_component 'Graphify helper' cfg launcher --command "$HOME/.local/bin/undex-graphify" --backup-root "$UNDEX_BACKUP_ROOT"
+run_component 'Project setup helper' cfg launcher --command "$HOME/.local/bin/undex-project-setup" --backup-root "$UNDEX_BACKUP_ROOT"

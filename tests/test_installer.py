@@ -17,8 +17,10 @@ class InstallerTests(ShellTest):
         self.assert_ok(self.install('--non-interactive'))
         data=tomllib.loads((home/'config.toml').read_text())
         self.assertIn('other',data['mcp_servers'])
-        self.assertEqual(data['model'],'gpt-6.2-sol')
-        self.assertTrue((self.home/'.local/bin/undex-graphify').is_file())
+        self.assertNotIn('model', data)
+        self.assertIn(['codex', 'plugin', 'add', 'pstack@pstack-claude'], self.calls())
+        self.assertTrue((self.home/'.local/bin/undex-project-setup').is_file())
+        self.assertFalse((self.home/'.local/bin/undex-graphify').exists())
         before=len(self.calls())
         self.assert_ok(self.install('--non-interactive'))
         after=self.calls()[before:]
@@ -36,7 +38,8 @@ class InstallerTests(ShellTest):
         result=self.install('--non-interactive')
         self.assert_ok(result)
         self.assertIn('pending',result.stdout)
-        self.assertTrue((self.home/'.codex/agents/code_explorer.toml').exists())
+        self.assertNotIn('pstack:poteto-mode', (self.home/'.codex/AGENTS.md').read_text())
+        self.assertFalse((self.home/'.codex/agents').exists())
 
     def test_unknown_options_do_not_mutate_home(self):
         before=sorted(p.relative_to(self.home) for p in self.home.rglob('*'))

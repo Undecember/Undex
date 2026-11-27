@@ -1,6 +1,6 @@
 # Undex
 
-My reproducible Codex setup: tools, agent roles, preferences, and the account setup
+My reproducible Codex setup: tools, pstack workflows, preferences, and the account setup
 steps that still need me.
 
 Clone this repository, keep the checkout, and run:
@@ -31,7 +31,7 @@ installation has not yet been verified in a disposable Ubuntu system.
 | Playwright skill | `playwright-cli install --skills=agents --global` |
 | Browser | Chrome, including missing Linux dependencies |
 | Context7 | `npx ctx7 setup --codex --mcp`, with the selected CLI version recorded for retries |
-| Default plugins | Superpowers and GitHub through Codex's plugin CLI |
+| Default plugins | pstack from `michael-denyer/pstack-claude` and GitHub through Codex's plugin CLI |
 
 RTK uses this installation command:
 
@@ -62,34 +62,22 @@ Official references: [nvm](https://github.com/nvm-sh/nvm#installing-and-updating
 
 ## Personal defaults
 
-- Main model: `gpt-6.2-sol`, medium reasoning.
-- Agents enabled, concurrency setting `3`, `gpt-6.2-sol`/medium fallback.
-- Approval policy `never` and sandbox `danger-full-access`: Codex commands run
-  without approval prompts or Codex filesystem sandbox restrictions.
-- Routing and cost policy, Superpowers workflow, Context7 documentation lookup,
-  Graphify preference, and RTK integration.
-- Ten preserved roles: `browser_tester`, `code_explorer`, `debugger`,
-  `docs_researcher`, `reviewer`, `scoped_fix`, `security_reviewer`, `test_engineer`,
-  `triage`, and `ui_engineer`.
+- Choose the main model and reasoning effort in Codex.
+- Subagents are enabled. Run `$pstack:setup-pstack` to set the models and reasoning
+  effort pstack uses for delegated roles. These settings apply when the Codex
+  host supports the corresponding subagent overrides.
+- Approval policy `never` and sandbox `danger-full-access` allow Codex commands to
+  run without approval prompts or Codex filesystem sandbox restrictions.
+- Undex includes Context7, Graphify, and RTK tool preferences.
 
-Debugger, reviewer, and UI engineer use `gpt-6.2-sol` with their existing reasoning
-levels. Security reviewer uses `gpt-6.2-astra` at high reasoning. Luna remains
-assigned to exploration, documentation lookup, and triage; Terra remains assigned
-to browser QA, scoped fixes, and focused test work. Each role explicitly pins its
-model and reasoning level, so changing the fallback alone does not update roles.
-
-Unresolved cross-module failures and competing architectural constraints escalate
-to Astra at high reasoning; complex integration-test work escalates from Terra to
-Sol. Compare total usage, retries, review corrections, elapsed time, and verification
-success per accepted result before changing reasoning levels or concurrency.
-
-The `ui_engineer` role references Impeccable; Undex does not install it. Models still
-require access on the signed-in account; Undex does not silently substitute models.
+On upgrade, Undex replaces its managed routing instructions, removes matching
+legacy subagent defaults, and backs up stock agent profiles before removing them.
+Existing main-model settings and customized profiles are preserved.
 
 Personal instructions are placed in a marked block in `AGENTS.md`; existing text
 outside that block remains. Context7 and RTK maintain their own generated content.
-The Context7 plugin is not installed alongside its setup command. Existing plugins,
-including an already installed Context7 plugin, are not automatically removed.
+Context7 uses its MCP setup command. After pstack is installed and enabled,
+Undex removes the curated Superpowers plugin if present.
 
 ## Optional plugins
 
@@ -136,10 +124,18 @@ it through `/plugins` when you want to use it.
 4. **RTK:** start a fresh Codex session and trust its generated hook if Codex asks.
    The installer does not copy this server's remembered hook trust.
 
-Plugins are installed using commands such as:
+5. **pstack:** use `$pstack:setup-pstack` in a fresh Codex session to choose
+   models and reasoning effort for your Codex profile. For automatic routing in
+   every project, review and trust the pstack hook through `/hooks`. For routing
+   only in projects you opt into, leave the hook untrusted or select
+   `session hook: off` during setup, then use the project helper below.
+   See [pstack's Codex setup reference](https://github.com/michael-denyer/pstack-claude/blob/main/plugins/pstack/skills/setup-pstack/references/runtimes.md#codex).
+
+Undex uses these commands to install the default plugins.
 
 ```bash
-codex plugin add superpowers@openai-curated-remote
+codex plugin marketplace add michael-denyer/pstack-claude
+codex plugin add pstack@pstack-claude
 codex plugin add github@openai-curated-remote
 ```
 
@@ -147,46 +143,31 @@ If the account/catalog does not expose a plugin through the CLI, open `/plugins`
 search its name, and install it there. Then rerun Undex. Marketplace availability,
 organization policy, and service authorization remain account-dependent.
 
-Start a **new Codex session** after installation to load the new roles, skills,
+Start a **new Codex session** after installation to load the new skills,
 plugins, and MCP configuration.
 
-## Graphify per repository
+## Project setup
 
-The main installer adds `undex-graphify` to `~/.local/bin`. Keep this checkout in
-place: that launcher calls the helper here. Add `~/.local/bin` to PATH if needed,
-or invoke the helper directly:
-
-```bash
-cd /path/to/my-repository
-/path/to/Undex/bin/undex-graphify
-
-# Once ~/.local/bin is on PATH:
-undex-graphify
-undex-graphify /path/to/another-repository
-undex-graphify --refresh
-```
-
-The helper finds the Git root, builds a code graph in `graphify-out`, then merges
-its MCP server into that repository's `.codex/config.toml`. Its own Graphify server
-definition is replaced so an old HTTP transport cannot conflict with stdio; other
-servers are preserved. Existing graphs are
-reused unless `--refresh` is requested. A refreshed graph is backed up first.
-No global MCP target or trusted-project entry is created. Codex loads project
-configuration in trusted projects; open/trust the project through Codex as needed.
-
-Indexing uses AST extraction and clustering without model calls:
+The installer adds `undex-project-setup` to `~/.local/bin` and retires the
+previous Undex-generated `undex-graphify` launcher. Keep the Undex checkout in
+place so the launcher can find the helper. Run it from a Git repository or
+pass the repository path.
 
 ```bash
-graphify update /path/to/repository --no-cluster
-graphify cluster-only /path/to/repository --no-label --no-viz
+undex-project-setup
+undex-project-setup /path/to/my-repository
 ```
 
-This covers code relationships. Semantic extraction for documents, papers, or
-images is a separate Graphify workflow that may need model credentials and incur
-usage costs; consult its official documentation before enabling it. Undex does
-not install repository Git hooks or force a shrinking graph overwrite. Graphify
-creates its own output/cache files in the repository. Review those outputs and
-choose whether to ignore or commit them for that project.
+The helper runs `graphify extract . --code-only` from the repository root with
+model calls disabled. It backs up an existing graph before extraction and merges
+the Graphify MCP entry into the project's `.codex/config.toml`. Open the project
+as trusted in Codex to load that MCP configuration.
+
+The helper adds a short instruction in the repository's `AGENTS.md` to use
+`pstack:poteto-mode`. Codex loads it in a fresh session for that repository.
+The pstack plugin, model sheet, and SessionStart hook setting belong to the
+Codex user profile. Project setup uses the installed plugin and does not write
+model choices or change hook settings.
 
 If an existing Graphify installation lacks MCP support, preserve its version and
 add the extra explicitly:
@@ -261,7 +242,7 @@ cp -- /path/to/backup/config.toml "$HOME/.codex/config.toml"
 chmod 600 "$HOME/.codex/config.toml"
 ```
 
-`CODEX_HOME` is honored for personal configuration, roles, Codex commands, and RTK.
+`CODEX_HOME` is honored for personal configuration, Codex commands, and RTK.
 The Context7 setup command is documented against `~/.codex`; Undex refuses to run
 that integration against a custom Codex home until upstream support is verified.
 Configure Context7 manually in your custom home instead. Playwright's global skill
@@ -272,7 +253,7 @@ symlinks are rejected rather than following an unexpected destination.
 
 ```bash
 uv run --locked python -m unittest discover -s tests -v
-for file in install.sh bin/undex-graphify lib/*.sh; do bash -n "$file" || exit; done
+for file in install.sh bin/undex-project-setup lib/*.sh; do bash -n "$file" || exit; done
 git diff --check
 ```
 

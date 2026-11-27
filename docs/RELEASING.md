@@ -3,8 +3,8 @@
 Initial release: `v0.1.0`, squash-integrated from `dev` into `main`. The project is a source
 bundle (`tool.uv.package = false`), not a Python package for publication to PyPI.
 
-Current release: `v0.1.1`, a preview for the GPT-6.2 routing updates.
-Its notes are in `docs/releases/v0.1.1.md`. Full fresh-host validation is still
+Current release: `v0.2.0`, a preview for the pstack migration and project setup helper.
+Its notes are in `docs/releases/v0.2.0.md`. Full fresh-host validation is still
 outstanding, so keep the preview designation when publishing before that validation.
 
 Release preparation creates notes and local assets. Tagging, pushing, and creating
@@ -26,8 +26,8 @@ or publishing a GitHub release are separate explicit steps.
 
 ```bash
 uv run --locked python -m unittest discover -s tests -v
-uvx --from shellcheck-py shellcheck -x install.sh lib/*.sh bin/undex-graphify
-for file in install.sh bin/undex-graphify lib/*.sh; do bash -n "$file" || exit; done
+uvx --from shellcheck-py shellcheck -x install.sh lib/*.sh bin/undex-project-setup
+for file in install.sh bin/undex-project-setup lib/*.sh; do bash -n "$file" || exit; done
 git diff --check
 git status --short
 ```
@@ -37,12 +37,12 @@ git status --short
 After the release preparation is committed and the tag is explicitly approved:
 
 ```bash
-git tag -a v0.1.1 -m "Undex v0.1.1"
-mkdir -p dist
-git archive --format=tar.gz --prefix=undex-0.1.1/ v0.1.1 > dist/undex-0.1.1.tar.gz
-(cd dist && sha256sum undex-0.1.1.tar.gz > SHA256SUMS)
-(cd dist && sha256sum -c SHA256SUMS)
-tar -tzf dist/undex-0.1.1.tar.gz
+git tag -a v0.2.0 -m "Undex v0.2.0"
+mkdir -p dist/v0.2.0
+git archive --format=tar.gz --prefix=undex-0.2.0/ v0.2.0 > dist/v0.2.0/undex-0.2.0.tar.gz
+(cd dist/v0.2.0 && sha256sum undex-0.2.0.tar.gz > SHA256SUMS)
+(cd dist/v0.2.0 && sha256sum -c SHA256SUMS)
+tar -tzf dist/v0.2.0/undex-0.2.0.tar.gz
 ```
 
 The archive contains only the tagged source tree. It excludes `.git`, local
@@ -51,9 +51,9 @@ archive built before the release commit must be rebuilt from the final tag;
 its checksum can change when notes or licensing change.
 
 Extract the final archive into a temporary directory and run the same tests from
-there. Check that `install.sh`, `bin/undex-graphify`, and the external-command test
-fixture retain executable permissions. The archive must contain `uv.lock`, all ten
-agent roles, and every installer module.
+there. Check that `install.sh`, `bin/undex-project-setup`, and the external-command
+test fixture retain executable permissions. Check the archive against the tagged
+tree for the lockfile, configuration assets, and installer modules.
 
 ## Publish when authorized
 
@@ -61,14 +61,13 @@ Push the reviewed branch and tag:
 
 ```bash
 git push origin main
-git push origin v0.1.1
+git push origin v0.2.0
 ```
 
 On GitHub, open **Releases → Draft a new release**, select the existing tag, use
-`Undex v0.1.1` as the title, paste the notes from `docs/releases/v0.1.1.md`, and
+`Undex v0.2.0` as the title, paste the notes from `docs/releases/v0.2.0.md`, and
 attach both assets. Save the draft before publishing. GitHub CLI is not required.
 
-Remove the draft-status sentence from the notes and set the changelog release date
-when publication is actually approved. Review the GitHub draft, use the prerelease
-setting if this is still a preview, and publish explicitly. Do not treat a local
-archive or a passing command-double suite as evidence that publication occurred.
+Set the changelog date when publication is approved. Review the GitHub draft
+and verify the uploaded checksums before publishing. Use the prerelease setting
+for previews, then verify the published release and its assets.

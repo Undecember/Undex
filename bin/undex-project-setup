@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+UNDEX_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+# shellcheck source=lib/common.sh
+source "$UNDEX_ROOT/lib/common.sh"
+
+usage() {
+    printf 'Usage: undex-project-setup [PATH]\nBuild a code-only graph and configure Graphify and pstack for the Git project.\n'
+}
+
+case "${1:-}" in
+    --help|-h) usage; exit 0 ;;
+    -*) usage >&2; exit 1 ;;
+esac
+(( $# <= 1 )) || { usage >&2; exit 1; }
+repo="$(git -C "${1:-$PWD}" rev-parse --show-toplevel)" || { printf 'Run inside a Git repository or pass its path.\n' >&2; exit 1; }
+repo="$(cd -- "$repo" && pwd -P)"
+for tool in uv graphify graphify-mcp; do
+    command -v "$tool" >/dev/null || { printf '%s is missing. Run bash %q/install.sh first.\n' "$tool" "$UNDEX_ROOT" >&2; exit 1; }
+done
+command_path="$(command -v graphify-mcp)"
+graph="$repo/graphify-out/graph.json"
+
+undex_lock graphify
+cfg backup-file --graph "$graph" --backup-root "$UNDEX_BACKUP_ROOT"
+(
+    cd -- "$repo"
+    GRAPHIFY_BACKEND=none GRAPHIFY_OUT=graphify-out GRAPHIFY_NO_TIPS=1 graphify extract . --code-only
+)
+cfg check-graph --graph "$graph"
+cfg project --repo "$repo" --command "$command_path" --graph "$graph" --backup-root "$UNDEX_BACKUP_ROOT"
+printf 'Graphify MCP configured in %s/.codex/config.toml\npstack workflow configured in %s/AGENTS.md\n' "$repo" "$repo"

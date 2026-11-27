@@ -40,6 +40,32 @@ select_optional_plugins() {
     state_set optional_plugins "$joined"
 }
 
+install_pstack() {
+    local installed="$1" id='pstack@pstack-claude' listing registered
+    listing="$(codex plugin marketplace list --json)" || return
+    registered="$(cfg pstack-marketplace <<<"$listing")" || return
+    if grep -Fxq -- "disabled:$id" <<<"$installed"; then
+        undex_record 'pstack plugin' pending 'installed but disabled; enable through /plugins'
+        return 0
+    fi
+    if [[ -z "$registered" ]]; then
+        codex plugin marketplace add michael-denyer/pstack-claude || return
+    elif [[ "$UNDEX_UPDATE" == 1 ]]; then
+        codex plugin marketplace upgrade pstack-claude || return
+    fi
+    if [[ "$UNDEX_UPDATE" == 1 || -z "$registered" ]] || ! grep -Fxq -- "$id" <<<"$installed"; then
+        codex plugin add "$id" || return
+        undex_record 'pstack plugin' ok 'installed'
+        undex_record 'pstack models' pending "in a fresh Codex session, run \$pstack:setup-pstack to choose user-level model settings"
+    else
+        undex_record 'pstack plugin' ok 'already installed; version preserved'
+    fi
+    if grep -Fxq -- 'superpowers@openai-curated-remote' <<<"$installed"; then
+        codex plugin remove superpowers@openai-curated-remote || return
+        undex_record 'Superpowers plugin' ok 'removed'
+    fi
+}
+
 install_plugins() {
     if ! codex login status >/dev/null 2>&1; then
         undex_record Plugins pending 'Codex login is required; rerun after device login'
@@ -48,7 +74,8 @@ install_plugins() {
     local listing installed plugin id is_default
     listing="$(codex plugin list --json)" || return
     installed="$(cfg plugins <<<"$listing")" || return
-    for plugin in superpowers github "${UNDEX_SELECTED_PLUGINS[@]}"; do
+    install_pstack "$installed" || return
+    for plugin in github "${UNDEX_SELECTED_PLUGINS[@]}"; do
         id="$plugin@openai-curated-remote"
         if [[ "$UNDEX_UPDATE" != 1 ]] && grep -Fxq -- "$id" <<<"$installed"; then
             if grep -Fxq -- "disabled:$id" <<<"$installed"; then
@@ -58,7 +85,7 @@ install_plugins() {
             fi
         else
             is_default=0
-            [[ "$plugin" != superpowers && "$plugin" != github ]] || is_default=1
+            [[ "$plugin" != github ]] || is_default=1
             if codex plugin add "$id"; then
                 undex_record "$plugin plugin" ok 'installed'
             elif (( is_default )); then
@@ -69,7 +96,7 @@ install_plugins() {
             fi
         fi
         case "$plugin" in
-            superpowers|openai-templates) ;;
+            openai-templates) ;;
             *) undex_record "$plugin connection" pending 'confirm service connection in Codex /plugins; installation alone does not verify account access' ;;
         esac
     done

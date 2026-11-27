@@ -1,5 +1,6 @@
 """Portable preferences and private backups. Never print configuration values."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -72,45 +73,57 @@ def recursive_merge(document, patch: dict) -> None:
             document[key] = value
 
 
-def merged_text(path: Path, patch: dict) -> str:
-    check_destination(path)
-    document = tomlkit.parse(path.read_text()) if path.exists() else tomlkit.document()
-    recursive_merge(document, patch)
-    return tomlkit.dumps(document)
-
-
-def merge_config(path: Path, patch: dict, backup_root: Path) -> bool:
-    return write_managed_text(path, merged_text(path, patch), backup_root)
+def legacy_agent_profiles(bundle_root: Path, agent_dir: Path):
+    if agent_dir.is_symlink():
+        return
+    for line in (bundle_root/'config/legacy-agent-profiles.sha256').read_text().splitlines():
+        digest, name = line.split()
+        path = agent_dir/name
+        if not path.is_symlink() and path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == digest:
+            yield path
 
 
 def apply_personal_config(bundle_root: Path, codex_home: Path, backup_root: Path) -> None:
     patch = tomlkit.parse((bundle_root/'config/codex.toml').read_text()).unwrap()
-    updates = {codex_home/'config.toml': merged_text(codex_home/'config.toml', patch)}
+    path = codex_home/'config.toml'
+    check_destination(path)
+    document = tomlkit.parse(path.read_text()) if path.exists() else tomlkit.document()
     agents = codex_home/'AGENTS.md'
     check_destination(agents)
     existing = agents.read_text() if agents.exists() else ''
     policy = (bundle_root/'config/AGENTS.md').read_text().replace('{{RTK_PATH}}', str(codex_home/'RTK.md'))
     block = f'{START}\n{policy.rstrip()}\n{END}'
+    retired_profiles = []
     if START in existing or END in existing:
         if existing.count(START) != 1 or existing.count(END) != 1 or existing.index(START) > existing.index(END):
             raise ValueError('Malformed Undex instruction markers; restore or repair AGENTS.md')
         before, rest = existing.split(START, 1)
-        _, after = rest.split(END, 1)
-        updates[agents] = before + block + after
+        old_policy, after = rest.split(END, 1)
+        instructions = before + block + after
+        if old_policy.lstrip().startswith('## Agent Routing and Cost Policy'):
+            retired_profiles = list(legacy_agent_profiles(bundle_root, codex_home/'agents'))
+            settings = document.get('agents', {})
+            if hasattr(settings, 'items'):
+                legacy_defaults = {
+                    'default_subagent_model': ('gpt-6.1-sol', 'gpt-6.2-sol'),
+                    'default_subagent_reasoning_effort': ('medium',),
+                    'max_concurrent_threads_per_session': (3,),
+                }
+                for key, defaults in legacy_defaults.items():
+                    if settings.get(key) in defaults:
+                        del settings[key]
     else:
-        updates[agents] = (existing.rstrip() + '\n\n' if existing.strip() else '') + block + '\n'
-    for role in sorted((bundle_root/'config/agents').glob('*.toml')):
-        tomlkit.parse(role.read_text())
-        updates[codex_home/'agents'/role.name] = role.read_text()
-    # Validate all targets before the first write.
-    for path in updates:
-        check_destination(path)
+        instructions = (existing.rstrip() + '\n\n' if existing.strip() else '') + block + '\n'
+    recursive_merge(document, patch)
     hooks = codex_home/'hooks.json'
     check_destination(hooks)
     if hooks.exists():
         json.loads(hooks.read_text())
-    for path, content in updates.items():
-        write_managed_text(path, content, backup_root)
+    write_managed_text(path, tomlkit.dumps(document), backup_root)
+    for profile in retired_profiles:
+        backup(profile, backup_root)
+        profile.unlink()
+    write_managed_text(agents, instructions, backup_root)
 
 
 def snapshot(codex_home: Path, backup_root: Path) -> None:
@@ -136,9 +149,56 @@ def configure_graphify(repo: Path, command: Path, graph: Path, backup_root: Path
     write_managed_text(path, tomlkit.dumps(document), backup_root)
 
 
+def configure_project(repo: Path, command: Path, graph: Path, backup_root: Path) -> None:
+    agents = repo/'AGENTS.md'
+    check_destination(agents)
+    existing = agents.read_text() if agents.exists() else ''
+    start = '<!-- undex:project-pstack:start -->'
+    end = '<!-- undex:project-pstack:end -->'
+    block = (
+        f'{start}\n'
+        'Use the `pstack:poteto-mode` skill for development work in this repository.\n'
+        f'{end}'
+    )
+    if start in existing or end in existing:
+        if existing.count(start) != 1 or existing.count(end) != 1 or existing.index(start) > existing.index(end):
+            raise ValueError('Malformed Undex pstack markers in project AGENTS.md')
+        before, rest = existing.split(start, 1)
+        _, after = rest.split(end, 1)
+        instructions = before + block + after
+    else:
+        separator = '' if not existing or existing.endswith('\n\n') else ('\n' if existing.endswith('\n') else '\n\n')
+        instructions = existing + separator + block + '\n'
+    configure_graphify(repo, command, graph, backup_root)
+    write_managed_text(agents, instructions, backup_root)
+
+
+def launcher_text(target: Path) -> str:
+    return '#!/usr/bin/env bash\nexec ' + shlex.quote(str(target)) + ' "$@"\n'
+
+
+def install_project_launcher(path: Path, backup_root: Path) -> None:
+    write_managed_text(path, launcher_text(ROOT/'bin/undex-project-setup'), backup_root)
+    path.chmod(0o700)
+    legacy = path.with_name('undex-graphify')
+    if legacy.is_symlink() or not legacy.is_file():
+        return
+    contents = legacy.read_text(errors='replace')
+    try:
+        lines = contents.splitlines()
+        tokens = shlex.split(lines[1]) if len(lines) == 2 else []
+    except ValueError:
+        return
+    if len(tokens) == 3:
+        target = Path(tokens[1])
+        if target.is_absolute() and target.parts[-2:] == ('bin', 'undex-graphify') and contents == launcher_text(target):
+            backup(legacy, backup_root)
+            legacy.unlink()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['apply', 'snapshot', 'graphify', 'state-get', 'state-set', 'plugins', 'context7-check', 'backup-file', 'check-graph', 'launcher'])
+    parser.add_argument('action', choices=['apply', 'snapshot', 'project', 'state-get', 'state-set', 'plugins', 'pstack-marketplace', 'context7-check', 'backup-file', 'check-graph', 'launcher'])
     parser.add_argument('values', nargs='*')
     parser.add_argument('--codex-home', type=Path)
     parser.add_argument('--backup-root', type=Path)
@@ -150,9 +210,7 @@ def main() -> None:
     if args.action == 'launcher':
         if not args.command or not args.backup_root:
             parser.error('--command and --backup-root are required')
-        text = '#!/usr/bin/env bash\nexec ' + shlex.quote(str(ROOT/'bin/undex-graphify')) + ' "$@"\n'
-        write_managed_text(args.command, text, args.backup_root)
-        args.command.chmod(0o700)
+        install_project_launcher(args.command, args.backup_root)
     elif args.action == 'backup-file':
         if not args.graph or not args.backup_root:
             parser.error('--graph and --backup-root are required')
@@ -172,10 +230,10 @@ def main() -> None:
             apply_personal_config(ROOT, args.codex_home, args.backup_root)
         else:
             snapshot(args.codex_home, args.backup_root)
-    elif args.action == 'graphify':
+    elif args.action == 'project':
         if not all([args.repo, args.command, args.graph, args.backup_root]):
-            parser.error('graphify requires --repo, --command, --graph, --backup-root')
-        configure_graphify(args.repo, args.command, args.graph, args.backup_root)
+            parser.error('project requires --repo, --command, --graph, --backup-root')
+        configure_project(args.repo, args.command, args.graph, args.backup_root)
     elif args.action == 'context7-check':
         if not args.codex_home:
             parser.error('--codex-home is required')
@@ -185,6 +243,18 @@ def main() -> None:
         enabled = server.get('enabled', True)
         supported = server.get('url', '').startswith('https://mcp.context7.com/') or any('@upstash/context7-mcp' in str(a) for a in server.get('args', []))
         sys.exit(0 if enabled and supported else 1)
+    elif args.action == 'pstack-marketplace':
+        data = json.load(sys.stdin)
+        if not isinstance(data, dict) or not isinstance(data.get('marketplaces'), list):
+            raise ValueError('Unsupported Codex marketplace JSON schema; update Codex explicitly')
+        for marketplace in data['marketplaces']:
+            if marketplace.get('name') != 'pstack-claude':
+                continue
+            source = marketplace.get('marketplaceSource') or {}
+            url = 'https://github.com/michael-denyer/pstack-claude'
+            if source.get('sourceType') != 'git' or source.get('source') not in (url, url + '.git'):
+                sys.exit('The pstack-claude marketplace points to a different source.')
+            print('registered')
     elif args.action == 'plugins':
         data = json.load(sys.stdin)
         if not isinstance(data, dict) or not isinstance(data.get('installed'), list):

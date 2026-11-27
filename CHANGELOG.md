@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0 — 2026-11-27 (preview)
+
+- Replace `undex-graphify` with `undex-project-setup` for code-only Graphify
+  extraction, project MCP registration, and a project pstack workflow instruction.
+
+- Adopt pstack from `michael-denyer/pstack-claude` as the default workflow plugin.
+- Use pstack for delegated model routing and leave the main model to Codex.
+- Migrate older Undex installs by backing up and retiring stock routing profiles
+  and replacing the curated Superpowers plugin after pstack is enabled.
+
 ## 0.1.1 — 2026-11-18 (preview)
 
 - Upgrade the main agent and subagent fallback to GPT-6.2 Sol at medium reasoning.

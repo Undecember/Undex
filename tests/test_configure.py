@@ -26,8 +26,8 @@ class ConfigurationTests(unittest.TestCase):
         p.write_text(original)
         config.apply_personal_config(ROOT, self.home, self.backups)
         d = tomllib.loads(p.read_text())
-        self.assertEqual(d["model"], "gpt-6.2-sol")
-        self.assertEqual(d["agents"]["max_concurrent_threads_per_session"], 3)
+        self.assertEqual(d["model"], "old")
+        self.assertEqual(d["agents"], {"enabled": True})
         self.assertEqual(d["approval_policy"], "never")
         self.assertEqual(d["sandbox_mode"], "danger-full-access")
         self.assertEqual(d["mcp_servers"]["other"]["url"], "https://example.test")
@@ -47,9 +47,56 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn('Generated rule', p.read_text())
         self.assertIn('My existing policy', p.read_text())
         self.assertIn(str(self.home / 'RTK.md'), p.read_text())
-        for role in (ROOT / 'config/agents').glob('*.toml'):
-            self.assertEqual(role.read_bytes(), (self.home / 'agents' / role.name).read_bytes())
-        self.assertEqual(len(list((self.home / 'agents').glob('*.toml'))), 10)
+        self.assertNotIn('pstack:poteto-mode', p.read_text())
+        self.assertFalse((self.home / 'agents').exists())
+
+    def test_upgrade_retires_legacy_routing_and_backs_up_stock_profiles(self):
+        path = self.home / 'config.toml'
+        path.write_text(
+            'model = "personal"\n[agents]\ndefault_subagent_model = "gpt-6.1-sol"\n'
+            'default_subagent_reasoning_effort = "medium"\nmax_concurrent_threads_per_session = 3\n'
+        )
+        instructions = self.home / 'AGENTS.md'
+        instructions.write_text(
+            f'{config.START}\n## Agent Routing and Cost Policy\nUse Superpowers.\n{config.END}\n'
+            'swarm workers: personal @high\n'
+        )
+        profiles = self.home / 'agents'
+        profiles.mkdir()
+        stock = (
+            'name = "triage"\ndescription = "Quick read-only triage of bounded tasks."\n'
+            'model = "gpt-6-luna"\nmodel_reasoning_effort = "low"\ndeveloper_instructions = """\n'
+            'Classify the issue, give 1-3 relevant next actions, and cite exact file pointers if available. '
+            'Do not edit files. Avoid broad scans, extra agents, and long output.\n"""\n'
+        )
+        (profiles / 'triage.toml').write_text(stock)
+        (profiles / 'reviewer.toml').write_text('name = "personal-reviewer"\n')
+        config.apply_personal_config(ROOT, self.home, self.backups)
+        data = tomllib.loads(path.read_text())
+        self.assertEqual(data['model'], 'personal')
+        self.assertEqual(data['agents'], {'enabled': True})
+        self.assertIn('swarm workers: personal @high', instructions.read_text())
+        self.assertNotIn('Superpowers', instructions.read_text())
+        self.assertFalse((profiles / 'triage.toml').exists())
+        self.assertTrue((profiles / 'reviewer.toml').exists())
+        self.assertEqual([p.read_text() for p in self.backups.rglob('triage.toml')], [stock])
+
+    def test_upgrade_preserves_custom_fallback_and_concurrency(self):
+        path = self.home / 'config.toml'
+        path.write_text(
+            '[agents]\ndefault_subagent_model = "custom"\n'
+            'default_subagent_reasoning_effort = "low"\nmax_concurrent_threads_per_session = 6\n'
+        )
+        (self.home / 'AGENTS.md').write_text(
+            f'{config.START}\n## Agent Routing and Cost Policy\n{config.END}\n'
+        )
+        config.apply_personal_config(ROOT, self.home, self.backups)
+        self.assertEqual(tomllib.loads(path.read_text())['agents'], {
+            'enabled': True,
+            'default_subagent_model': 'custom',
+            'default_subagent_reasoning_effort': 'low',
+            'max_concurrent_threads_per_session': 6,
+        })
 
     def test_malformed_config_leaves_all_originals_untouched(self):
         p = self.home / "config.toml"
@@ -74,6 +121,23 @@ class ConfigurationTests(unittest.TestCase):
         d = tomllib.loads((repo/'.codex/config.toml').read_text())
         self.assertEqual(d['mcp_servers']['graphify']['args'], [str(repo/'graphify-out/graph.json')])
         self.assertFalse((self.home/'config.toml').exists())
+
+    def test_launcher_backs_up_old_undex_launcher_from_another_checkout(self):
+        launcher = self.home/'undex-project-setup'
+        legacy = self.home/'undex-graphify'
+        old_text = config.launcher_text(Path('/old checkout/bin/undex-graphify'))
+        legacy.write_text(old_text)
+        config.install_project_launcher(launcher, self.backups)
+        self.assertFalse(legacy.exists())
+        self.assertEqual([p.read_text() for p in self.backups.rglob('undex-graphify')], [old_text])
+        self.assertEqual(launcher.read_text(), config.launcher_text(ROOT/'bin/undex-project-setup'))
+        self.assertEqual(launcher.stat().st_mode & 0o777, 0o700)
+
+    def test_launcher_preserves_custom_legacy_command(self):
+        legacy = self.home/'undex-graphify'
+        legacy.write_text('#!/bin/sh\nprintf "custom command\\n"\n')
+        config.install_project_launcher(self.home/'undex-project-setup', self.backups)
+        self.assertIn('custom command', legacy.read_text())
 
     def test_backup_snapshot_includes_hook_and_roles_without_overwriting_backup(self):
         (self.home/'hooks.json').write_text('{"other":true}')

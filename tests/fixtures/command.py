@@ -51,8 +51,20 @@ elif name == 'codex':
         s['login'] = True
     elif args == ['plugin','list','--json']:
         print(json.dumps({'installed':[{'pluginId': x, 'installed':True, 'enabled':x not in s.get('disabled_plugins',[]), 'version':'1.0.0'} for x in s['plugins']], 'available':[]}))
+    elif args == ['plugin','marketplace','list','--json']:
+        print(json.dumps({'marketplaces': s.get('marketplaces', [])}))
+    elif args == ['plugin','marketplace','add','michael-denyer/pstack-claude']:
+        s.setdefault('marketplaces', []).append({
+            'name': 'pstack-claude',
+            'marketplaceSource': {'sourceType': 'git', 'source': 'https://github.com/michael-denyer/pstack-claude.git'},
+        })
     elif args[:2] == ['plugin','add']:
-        s['plugins'].append(args[2])
+        if args[2] == 'pstack@pstack-claude' and not s.get('marketplaces'):
+            sys.exit(1)
+        if args[2] not in s['plugins']:
+            s['plugins'].append(args[2])
+    elif args[:2] == ['plugin','remove']:
+        s['plugins'].remove(args[2])
     elif '--help' in args:
         print('plugin add --json install --skills')
 elif name == 'npx':
@@ -75,7 +87,7 @@ elif name == 'playwright-cli':
     elif '--help' in args:
         print('--skills --global --with-deps')
 elif name == 'graphify':
-    if args[:1] == ['update']:
+    if args == ['extract', '.', '--code-only']:
         graph = Path(args[1])/'graphify-out/graph.json'
         graph.parent.mkdir(parents=True, exist_ok=True)
         graph.write_text('{"nodes":[{"id":"hello"}],"edges":[]}')

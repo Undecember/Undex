@@ -10,7 +10,42 @@ class PluginTests(ShellTest):
     def test_defaults_install_once_and_no_optional_plugins(self):
         self.assert_ok(self.shell('select_optional_plugins; install_plugins; install_plugins', self.modules))
         adds = [c for c in self.calls() if c[:2]==['codex','plugin'] and c[2]=='add']
-        self.assertEqual(adds,[['codex','plugin','add','superpowers@openai-curated-remote'], ['codex','plugin','add','github@openai-curated-remote']])
+        self.assertEqual(adds,[['codex','plugin','add','pstack@pstack-claude'], ['codex','plugin','add','github@openai-curated-remote']])
+        self.assertEqual(self.calls().count(['codex', 'plugin', 'marketplace', 'add', 'michael-denyer/pstack-claude']), 1)
+
+    def test_upgrade_removes_superpowers_only_after_installing_pstack(self):
+        self.change(plugins=['superpowers@openai-curated-remote'])
+        self.assert_ok(self.shell('select_optional_plugins; install_plugins', self.modules))
+        calls = self.calls()
+        self.assertLess(calls.index(['codex', 'plugin', 'add', 'pstack@pstack-claude']),
+                        calls.index(['codex', 'plugin', 'remove', 'superpowers@openai-curated-remote']))
+        self.assert_ok(self.shell('UNDEX_UPDATE=1; select_optional_plugins; install_plugins', self.modules))
+        self.assertIn(['codex', 'plugin', 'marketplace', 'upgrade', 'pstack-claude'], self.calls())
+        self.assertEqual(self.calls().count(['codex', 'plugin', 'remove', 'superpowers@openai-curated-remote']), 1)
+
+    def test_failed_pstack_install_keeps_superpowers(self):
+        self.change(plugins=['superpowers@openai-curated-remote'],
+                    fail_command=['codex', 'plugin', 'add', 'pstack@pstack-claude'])
+        self.assertNotEqual(self.shell('select_optional_plugins; install_plugins', self.modules).returncode, 0)
+        self.assertNotIn(['codex', 'plugin', 'remove', 'superpowers@openai-curated-remote'], self.calls())
+
+    def test_disabled_pstack_keeps_superpowers_during_update(self):
+        self.change(plugins=['pstack@pstack-claude', 'superpowers@openai-curated-remote'],
+                    disabled_plugins=['pstack@pstack-claude'])
+        result = self.shell('UNDEX_UPDATE=1; select_optional_plugins; install_plugins', self.modules)
+        self.assert_ok(result)
+        self.assertIn('pstack plugin', result.stdout)
+        self.assertIn('installed but disabled', result.stdout)
+        self.assertNotIn(['codex', 'plugin', 'add', 'pstack@pstack-claude'], self.calls())
+        self.assertNotIn(['codex', 'plugin', 'remove', 'superpowers@openai-curated-remote'], self.calls())
+
+    def test_same_name_marketplace_from_a_different_source_is_rejected(self):
+        self.change(marketplaces=[{'name': 'pstack-claude',
+                                   'marketplaceSource': {'sourceType': 'local', 'source': '/other'}}])
+        result = self.shell('select_optional_plugins; install_plugins', self.modules)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('different source', result.stderr)
+        self.assertNotIn(['codex', 'plugin', 'add', 'pstack@pstack-claude'], self.calls())
 
     def test_named_optional_choices_are_allowed_but_other_plugins_rejected(self):
         self.assert_ok(self.shell('UNDEX_PLUGIN_SELECTION=gmail,sites; select_optional_plugins; install_plugins',self.modules))
